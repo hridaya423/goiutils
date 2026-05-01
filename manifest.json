@@ -1,15 +1,12 @@
 {
   "manifest_version": 3,
   "name": "GOI Utils",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "QOL for GOIs",
   "permissions": [],
   "content_scripts": [
     {
-      "matches": [
-        "https://review.hackclub.com/admin/ysws_reviews",
-        "https://review.hackclub.com/admin/ysws_reviews/*"
-      ],
+      "matches": ["https://review.hackclub.com/admin/ysws_reviews*"],
       "js": ["content.js"],
       "run_at": "document_idle"
     }
