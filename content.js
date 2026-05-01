@@ -2,7 +2,9 @@
   'use strict';
 
   const DAILY_GOAL = 160;
+  const POOL_PRIZE = 5000;
   const STORAGE_KEY = 'ysws_review_stats_v1';
+  const POOL_KEY = 'ysws_pool_total_v1';
 
   function getTodayISO() {
     return new Date().toISOString().split('T')[0];
@@ -42,8 +44,38 @@
     return { stats, alreadyCounted: false };
   }
 
+  function calculatePoolTotal() {
+    let total = 0;
+    const rows = document.querySelectorAll('table tbody tr, table tr');
+    for (const row of rows) {
+      if (row.querySelector('th')) continue;
+      const cells = row.querySelectorAll('td');
+      if (cells.length < 4) continue;
+      const val = parseInt((cells[3].textContent || '').trim(), 10);
+      if (!isNaN(val)) total += val;
+    }
+    return total;
+  }
+
+  function getPoolTotal() {
+    const saved = localStorage.getItem(POOL_KEY);
+    if (saved) return parseInt(saved, 10);
+    const calculated = calculatePoolTotal();
+    if (calculated > 0) {
+      localStorage.setItem(POOL_KEY, String(calculated));
+    }
+    return calculated;
+  }
+
+  function formatCurrency(n) {
+    return Math.round(n).toLocaleString('en-US');
+  }
+
   function makeStatsBar() {
     const stats = getStats();
+    const poolTotal = getPoolTotal();
+    const prize = poolTotal > 0 ? (stats.total / poolTotal) * POOL_PRIZE : 0;
+    const prizePct = poolTotal > 0 ? Math.min((stats.total / poolTotal) * 100, 100) : 0;
 
     const container = document.createElement('div');
     container.id = 'ysws-review-stats';
@@ -82,8 +114,13 @@
 
     const totalText = document.createElement('span');
     totalText.id = 'ysws-stat-total';
-    totalText.style.cssText = 'color:#d1d5db;font-size:14px;margin-left:auto;';
-    totalText.textContent = `Total reviewed: ${stats.total}`;
+    totalText.style.cssText = 'color:#d1d5db;font-size:14px;';
+    totalText.textContent = `Total reviewed: ${stats.total}/${poolTotal}`;
+
+    const prizeText = document.createElement('span');
+    prizeText.id = 'ysws-stat-prize';
+    prizeText.style.cssText = 'color:#4ade80;font-size:14px;margin-left:auto;';
+    prizeText.textContent = `Pool Prize: ${formatCurrency(prize)} (${prizePct.toFixed(1)}%)`;
 
     const refreshBtn = document.createElement('button');
     refreshBtn.textContent = 'Refresh';
@@ -94,10 +131,15 @@
     `;
     refreshBtn.onclick = () => {
       const s = getStats();
+      const pTotal = getPoolTotal();
+      const pVal = pTotal > 0 ? (s.total / pTotal) * POOL_PRIZE : 0;
+      const pPct = pTotal > 0 ? Math.min((s.total / pTotal) * 100, 100) : 0;
       document.getElementById('ysws-stat-today').textContent =
         `Devlogs reviewed today: ${s.today}/${DAILY_GOAL}`;
       document.getElementById('ysws-stat-total').textContent =
-        `Total reviewed: ${s.total}`;
+        `Total reviewed: ${s.total}/${pTotal}`;
+      document.getElementById('ysws-stat-prize').textContent =
+        `Pool Prize: ${formatCurrency(pVal)} (${pPct.toFixed(1)}%)`;
       document.getElementById('ysws-stat-progress').style.width =
         `${Math.min((s.today / DAILY_GOAL) * 100, 100)}%`;
     };
@@ -105,6 +147,7 @@
     container.appendChild(todayText);
     container.appendChild(progressContainer);
     container.appendChild(totalText);
+    container.appendChild(prizeText);
     container.appendChild(refreshBtn);
 
     return container;
@@ -242,6 +285,7 @@
     if (!headerContainer) return;
     if (document.getElementById('ysws-review-stats')) return;
 
+    getPoolTotal();
     const bar = makeStatsBar();
     headerContainer.parentNode.insertBefore(bar, headerContainer.nextSibling);
   }
