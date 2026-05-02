@@ -217,8 +217,6 @@
 
   function setupDetailPage() {
     const reviewId = getReviewIdFromUrl();
-    const devlogCount = countDevlogsOnPage();
-    if (!devlogCount) return;
 
     const stats = getStats();
     const wasAlreadyCounted = reviewId ? stats.reviewedIds.includes(reviewId) : false;
@@ -236,9 +234,10 @@
       backdrop-filter: blur(4px);
     `;
 
+    const devlogCountNow = countDevlogsOnPage();
     const statusLine = wasAlreadyCounted
       ? `<div style="color:#4ade80;margin-top:2px;font-size:11px;">Already counted</div>`
-      : `<div style="color:#9ca3af;margin-top:2px;font-size:11px;">This review: ${devlogCount} devlog${devlogCount!==1?'s':''}</div>`;
+      : `<div style="color:#9ca3af;margin-top:2px;font-size:11px;">This review: ${devlogCountNow || '?'} devlog${(devlogCountNow !== 1) ? 's' : ''}</div>`;
 
     badge.innerHTML = `
       <div>Today: <b>${stats.today}</b> / ${DAILY_GOAL}</div>
@@ -258,12 +257,13 @@
 
       if (isComplete && !alreadyCountedThisSession && !btn.disabled) {
         alreadyCountedThisSession = true;
+        const devlogCount = countDevlogsOnPage() || 0;
         const result = addDevlogs(devlogCount, reviewId);
 
         if (result.alreadyCounted) {
           showToast(`Already counted this review! Today: ${result.stats.today}  •  Total: ${result.stats.total}`);
         } else {
-          showToast(`+${devlogCount} devlog${devlogCount!==1?'s':''} counted! Today: ${result.stats.today}  •  Total: ${result.stats.total}`);
+          showToast(`+${devlogCount} devlog${devlogCount !== 1 ? 's' : ''} counted! Today: ${result.stats.today}  •  Total: ${result.stats.total}`);
         }
 
         const b = document.getElementById('ysws-detail-badge');
