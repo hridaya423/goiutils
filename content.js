@@ -5,6 +5,7 @@
   const POOL_PRIZE = 5000;
   const STORAGE_KEY = 'ysws_review_stats_v1';
   const POOL_KEY = 'ysws_pool_total_v1';
+  const REVIEWER_FILTER_ID = 'ysws-reviewer-filter';
 
   function getTodayISO() {
     return new Date().toISOString().split('T')[0];
@@ -195,6 +196,139 @@
     }, 3000);
   }
 
+  function getStatusFilterText() {
+    const labels = document.querySelectorAll('label');
+    for (const label of labels) {
+      if ((label.textContent || '').trim() !== 'Status') continue;
+      const wrapper = label.closest('.space-y-1');
+      const selected = wrapper && wrapper.querySelector('button span');
+      return (selected && selected.textContent || '').trim();
+    }
+    return '';
+  }
+
+  function isDoneStatusSelected() {
+    return /^done\b/i.test(getStatusFilterText());
+  }
+
+  function getStatusFilterGrid() {
+    const labels = document.querySelectorAll('label');
+    for (const label of labels) {
+      if ((label.textContent || '').trim() === 'Status') {
+        return label.closest('.grid');
+      }
+    }
+    return null;
+  }
+
+  function getReviewRows() {
+    return Array.from(document.querySelectorAll('table tbody tr, table tr')).filter((row) => {
+      return !row.querySelector('th') && row.querySelectorAll('td').length >= 7;
+    });
+  }
+
+  function getRowReviewer(row) {
+    const cells = row.querySelectorAll('td');
+    return ((cells[6] && cells[6].textContent) || '').trim();
+  }
+
+  function getReviewerNames() {
+    const names = new Set();
+    for (const row of getReviewRows()) {
+      const reviewer = getRowReviewer(row);
+      if (reviewer && reviewer !== '-') names.add(reviewer);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }
+
+  function setRowVisible(row, visible) {
+    if (visible) {
+      if (row.dataset.yswsReviewerHidden === '1') {
+        row.style.display = row.dataset.yswsOriginalDisplay || '';
+        delete row.dataset.yswsReviewerHidden;
+        delete row.dataset.yswsOriginalDisplay;
+      }
+      return;
+    }
+    if (row.dataset.yswsReviewerHidden !== '1') {
+      row.dataset.yswsOriginalDisplay = row.style.display || '';
+      row.dataset.yswsReviewerHidden = '1';
+    }
+    row.style.display = 'none';
+  }
+
+  function resetReviewerFilterRows() {
+    for (const row of getReviewRows()) setRowVisible(row, true);
+  }
+
+  function applyReviewerFilter() {
+    const select = document.getElementById('ysws-reviewer-filter-select');
+    if (!select || !isDoneStatusSelected()) {
+      resetReviewerFilterRows();
+      return;
+    }
+    const reviewer = select.value;
+    for (const row of getReviewRows()) {
+      setRowVisible(row, !reviewer || getRowReviewer(row) === reviewer);
+    }
+  }
+
+  function syncReviewerOptions(select) {
+    const selected = select.value;
+    const names = getReviewerNames();
+    const signature = names.join('\u001f');
+    if (select.dataset.yswsReviewerNames === signature) return;
+
+    select.dataset.yswsReviewerNames = signature;
+    select.textContent = '';
+
+    const allOption = document.createElement('option');
+    allOption.value = '';
+    allOption.textContent = 'All reviewers';
+    select.appendChild(allOption);
+
+    for (const name of names) {
+      const option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    }
+
+    select.value = names.includes(selected) ? selected : '';
+  }
+
+  function removeReviewerFilter() {
+    const filter = document.getElementById(REVIEWER_FILTER_ID);
+    if (filter) filter.remove();
+    resetReviewerFilterRows();
+  }
+
+  function ensureReviewerFilter() {
+    if (!isDoneStatusSelected()) {
+      removeReviewerFilter();
+      return;
+    }
+
+    const grid = getStatusFilterGrid();
+    if (!grid) return;
+
+    let filter = document.getElementById(REVIEWER_FILTER_ID);
+    if (!filter) {
+      filter = document.createElement('div');
+      filter.id = REVIEWER_FILTER_ID;
+      filter.className = 'space-y-1';
+      filter.innerHTML = `
+        <label class="text-amber-400 font-mono text-xs">Reviewer</label>
+        <select id="ysws-reviewer-filter-select" class="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 font-mono text-xs text-white focus:outline-none focus:border-amber-600 hover:border-zinc-500 transition-colors" style="color-scheme: dark;"></select>
+      `;
+      grid.appendChild(filter);
+      filter.querySelector('select').addEventListener('change', applyReviewerFilter);
+    }
+
+    syncReviewerOptions(filter.querySelector('select'));
+    applyReviewerFilter();
+  }
+
   function countDevlogsOnPage() {
     const headings = document.querySelectorAll('h3');
     for (const h of headings) {
@@ -283,6 +417,7 @@
     if (!header) return;
     const headerContainer = header.closest('.flex.flex-wrap');
     if (!headerContainer) return;
+    ensureReviewerFilter();
     if (document.getElementById('ysws-review-stats')) return;
 
     getPoolTotal();
@@ -313,10 +448,21 @@
     run();
   }
 
+  let listUpdateScheduled = false;
+
+  function scheduleListUpdate() {
+    if (listUpdateScheduled) return;
+    listUpdateScheduled = true;
+    requestAnimationFrame(() => {
+      listUpdateScheduled = false;
+      if (isListPage(location.pathname)) injectListStats();
+    });
+  }
+
   const observer = new MutationObserver(() => {
     const path = location.pathname;
-    if (isListPage(path) && !document.getElementById('ysws-review-stats')) {
-      injectListStats();
+    if (isListPage(path)) {
+      scheduleListUpdate();
     } else if (isDetailPage(path) && !document.getElementById('ysws-detail-badge')) {
       setupDetailPage();
     }
